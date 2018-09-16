@@ -24,7 +24,8 @@ public class PetControl : MonoBehaviour
         Dance,
         Talk,
         Fail,
-        Sleep
+        Sleep,
+        Roll
     }
 
     AnimState currentAnimation = AnimState.Idle;
@@ -60,12 +61,14 @@ public class PetControl : MonoBehaviour
 
     public void OnSpawnButton()
     {
+        currentAnimation = AnimState.Roll;
         buttonPressed = true;
     }
 
     // Update is called once per frame
     void Update()
     {
+        SpawnPet();
         ProcessInput();
         PetBehaviour();
         PetAnim();
@@ -78,29 +81,32 @@ public class PetControl : MonoBehaviour
 
     void PetAnim()
     {
-        if (anim)
+        if (!anim) return;
+
+        switch (currentAnimation)
         {
-            switch (currentAnimation)
-            {
-                case AnimState.Idle:
-                    anim.CrossFade("Idle Giraffe");
-                    break;
-                case AnimState.Walk:
-                    anim.CrossFade("Walk Giraffe");
-                    break;
-                case AnimState.Dance:
-                    anim.CrossFade("Success Giraffe");
-                    break;
-                case AnimState.Talk:
-                    anim.CrossFade("Talk Giraffe");
-                    break;
-                case AnimState.Fail:
-                    break;
-                case AnimState.Sleep:
-                    anim.CrossFade("Sleep Giraffe");
-                    break;
-            }
+            case AnimState.Idle:
+                anim.CrossFade("Idle Giraffe");
+                break;
+            case AnimState.Walk:
+                anim.CrossFade("Walk Giraffe");
+                break;
+            case AnimState.Dance:
+                anim.CrossFade("Success Giraffe");
+                break;
+            case AnimState.Talk:
+                anim.CrossFade("Talk Giraffe");
+                break;
+            case AnimState.Fail:
+                break;
+            case AnimState.Sleep:
+                anim.CrossFade("Sleep Giraffe");
+                break;
+            case AnimState.Roll:
+                anim.CrossFade("Rolling Giraffe");
+                break;
         }
+
         pet.GetComponent<Giraffe>().bubble.SetActive(currentAnimation == AnimState.Talk);
     }
 
@@ -134,27 +140,51 @@ public class PetControl : MonoBehaviour
         }
     }
 
+    void SpawnPet()
+    {
+        if (pet == null)
+        {
+            var screenPosition = Camera.main.ScreenToViewportPoint(new Vector2(Screen.width / 2, Screen.height / 2));
+            ARPoint point = new ARPoint
+            {
+                x = screenPosition.x,
+                y = screenPosition.y
+            };
+
+            List<ARHitTestResult> hitResults =
+                UnityARSessionNativeInterface.GetARSessionNativeInterface().HitTest(
+                    point, ARHitTestResultType.ARHitTestResultTypeEstimatedHorizontalPlane);
+            if (hitResults.Count > 0)
+            {
+                foreach (var hitResult in hitResults)
+                {
+                    Vector3 position = UnityARMatrixOps.GetPosition(hitResult.worldTransform);
+                    pet = Instantiate(petPrefab);
+                    petTr = pet.transform;
+                    petTr.position = position;
+                    anim = pet.GetComponent<Animation>();
+
+                    Vector3 lookAt = Camera.main.transform.position;
+                    lookAt.y = position.y;
+                    petTr.LookAt(lookAt);
+                    petDest = position;
+                    break;
+                }
+            }
+        }
+    }
+
     void PetGo(Vector3 atPosition)
 	{
-        if (!pet)
+        if (pet)
         {
-            pet = Instantiate(petPrefab);
-            petTr = pet.transform;
-            petTr.position = atPosition;
-            anim = pet.GetComponent<Animation>();
-
-            Vector3 lookAt = Camera.main.transform.position;
-            lookAt.y = atPosition.y;
-            petTr.LookAt(lookAt);
-            petDest = atPosition;
+            if (Vector3.Distance(petTr.position, atPosition) > MoveToThreshold)
+            {
+                atPosition.y = petDest.y; // We keep the same height even if they are new planes
+                petDest = atPosition;
+            }
+            currentAnimation = AnimState.Idle;
         }
-
-        if (Vector3.Distance(petTr.position, atPosition) > MoveToThreshold)
-        {
-            atPosition.y = petDest.y; // We keep the same height even if they are new planes
-            petDest = atPosition;
-        }
-        currentAnimation = AnimState.Idle;
     }
 
     void ProcessInput()
